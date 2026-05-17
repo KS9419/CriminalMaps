@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a73e8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>CriminalMaps</title>
+<link rel="manifest" href="/CriminalMaps/manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue: #1a73e8;
+    --green: #34a853;
+    --red: #ea4335;
+    --yellow: #fbbc04;
+    --surface: #ffffff;
+    --bg: #e8eaed;
+    --text: #202124;
+    --subtext: #5f6368;
+    --card: #ffffff;
+    --shadow: 0 2px 8px rgba(0,0,0,0.15);
+    --shadow-lg: 0 4px 24px rgba(0,0,0,0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'Roboto', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── FAKE MAP ── */
+  #map {
+    position: absolute;
+    inset: 0;
+    background: #e5e3df;
+    overflow: hidden;
+  }
+
+  .map-grid {
+    position: absolute;
+    inset: -50px;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: mapDrift 20s linear infinite;
+  }
+
+  @keyframes mapDrift {
+    0% { transform: translate(0,0); }
+    100% { transform: translate(60px, 60px); }
+  }
+
+  /* Road network */
+  .road-layer {
+    position: absolute;
+    inset: 0;
+  }
+
+  .road-h {
+    position: absolute;
+    left: 0; right: 0;
+    background: #fff;
+    border-top: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+  }
+  .road-v {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: #fff;
+    border-left: 1px solid #ccc;
+    border-right: 1px solid #ccc;
+  }
+  .road-main { background: #fdd; border-color: #f5b5b5; }
+
+  /* Route line */
+  #route-line {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* GPS Dot */
+  #gps-dot {
+    position: absolute;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--blue);
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 6px rgba(26,115,232,0.25);
+    transform: translate(-50%, -50%);
+    transition: left 3s ease, top 3s ease;
+    z-index: 10;
+    animation: gpsPulse 2s infinite;
+  }
+
+  @keyframes gpsPulse {
+    0%, 100% { box-shadow: 0 0 0 6px rgba(26,115,232,0.25); }
+    50% { box-shadow: 0 0 0 12px rgba(26,115,232,0.1); }
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 12px 12px 8px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+    flex-direction: column;
+  }
+
+  #search-bar {
+    background: white;
+    border-radius: 24px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .search-icon { font-size: 18px; }
+
+  #search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    color: var(--text);
+    background: transparent;
+  }
+
+  #search-input::placeholder { color: var(--subtext); }
+
+  #go-btn {
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  /* ── NAVIGATION STRIP ── */
+  #nav-strip {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: var(--blue);
+    color: white;
+    padding: 48px 16px 16px;
+    z-index: 90;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  #nav-strip.active { display: flex; }
+
+  #nav-direction {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  #nav-street {
+    font-size: 15px;
+    opacity: 0.85;
+  }
+
+  #nav-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 4px;
+    font-size: 13px;
+    opacity: 0.8;
+  }
+
+  /* ── BOTTOM SHEET ── */
+  #bottom-sheet {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--card);
+    border-radius: 16px 16px 0 0;
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    padding: 0 0 24px;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  #bottom-sheet.visible { transform: translateY(0); }
+
+  .sheet-handle {
+    width: 40px; height: 4px;
+    background: #dadce0;
+    border-radius: 2px;
+    margin: 10px auto 16px;
+  }
+
+  /* ── ROUTE SUMMARY ── */
+  #route-summary {
+    padding: 0 16px 16px;
+    border-bottom: 1px solid #e8eaed;
+  }
+
+  .route-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .route-time-legit {
+    font-size: 13px;
+    color: var(--subtext);
+    text-decoration: line-through;
+  }
+
+  .route-time-criminal {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--green);
+  }
+
+  .route-time-label {
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 500;
+    margin-top: -4px;
+  }
+
+  .route-via {
+    font-size: 14px;
+    color: var(--subtext);
+  }
+
+  .route-via b { color: var(--text); }
+
+  /* ── CRIMINAL SUGGESTION CARD ── */
+  #suggestion-card {
+    margin: 12px 12px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid #ea4335;
+    display: none;
+  }
+
+  #suggestion-card.visible { display: block; }
+
+  .suggestion-header {
+    background: #ea4335;
+    color: white;
+    padding: 10px 14px;
+    font-family: 'Google Sans', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .suggestion-body {
+    background: #fff8f7;
+    padding: 12px 14px;
+  }
+
+  .suggestion-text {
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.4;
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+
+  .suggestion-saving {
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 700;
+    background: #e6f4ea;
+    padding: 3px 8px;
+    border-radius: 10px;
+    display: inline-block;
+    margin-bottom: 12px;
+  }
+
+  .suggestion-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-yes {
+    flex: 1;
+    background: #ea4335;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-family: 'Google Sans', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .btn-no {
+    flex: 1;
+    background: #f1f3f4;
+    color: var(--subtext);
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* ── REACTION TOAST ── */
+  #reaction-toast {
+    position: absolute;
+    bottom: 120px;
+    left: 16px; right: 16px;
+    background: #202124;
+    color: white;
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 18px;
+    font-weight: 700;
+    text-align: center;
+    z-index: 200;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+  }
+
+  #reaction-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── SIDE BUTTONS ── */
+  .map-btn {
+    position: absolute;
+    right: 12px;
+    background: white;
+    border-radius: 50%;
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow);
+    font-size: 20px;
+    cursor: pointer;
+    z-index: 50;
+    border: none;
+  }
+
+  #btn-locate { bottom: 220px; }
+  #btn-layers { bottom: 272px; }
+
+  /* ── ETA BAR (while navigating) ── */
+  #eta-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: #202124;
+    color: white;
+    padding: 14px 20px 28px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+  }
+
+  #eta-bar.active { display: flex; }
+
+  .eta-time {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .eta-detail {
+    font-size: 13px;
+    color: #9aa0a6;
+    margin-top: 2px;
+  }
+
+  #end-nav-btn {
+    background: #ea4335;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-family: 'Google Sans', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* ── OVERLAY LOADING ── */
+  #gps-loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.9);
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  #gps-loading.hidden { display: none; }
+
+  .loading-spinner {
+    width: 48px; height: 48px;
+    border: 4px solid #e8eaed;
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-size: 16px;
+    color: var(--subtext);
+    text-align: center;
+  }
+
+  .loading-subtext {
+    font-size: 13px;
+    color: #9aa0a6;
+    text-align: center;
+    max-width: 240px;
+  }
+
+  /* ── BADGE ── */
+  .criminal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fce8e6;
+    color: #ea4335;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Speed indicator */
+  #speed-display {
+    position: absolute;
+    left: 12px;
+    bottom: 220px;
+    background: white;
+    border-radius: 10px;
+    padding: 6px 12px;
+    box-shadow: var(--shadow);
+    text-align: center;
+    z-index: 50;
+    display: none;
+  }
+
+  #speed-display.active { display: block; }
+
+  .speed-num {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .speed-unit {
+    font-size: 10px;
+    color: var(--subtext);
+  }
+
+  /* Logo */
+  #app-logo {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Google Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--blue);
+    z-index: 200;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* Map label overlays */
+  .map-label {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 500;
+    color: #5f6368;
+    white-space: nowrap;
+    pointer-events: none;
+    background: rgba(255,255,255,0.7);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- GPS Loading Screen -->
+<div id="gps-loading">
+  <div style="font-size:40px">🗺️</div>
+  <div style="font-family:'Google Sans',sans-serif; font-size:22px; font-weight:700; color:#202124">CriminalMaps</div>
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Acquiring your location…</div>
+  <div class="loading-subtext">Also scanning for speed cameras, cop cars, and snitches</div>
+</div>
+
+<!-- Map -->
+<div id="map">
+  <div class="map-grid"></div>
+  <div class="road-layer" id="road-layer"></div>
+  <svg id="route-line" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="gps-dot"></div>
+
+  <!-- Map labels -->
+  <div class="map-label" style="top:22%;left:15%">Main St</div>
+  <div class="map-label" style="top:45%;left:60%">Commerce Blvd</div>
+  <div class="map-label" style="top:65%;left:25%">Industrial Ave</div>
+  <div class="map-label" style="top:30%;left:70%">Park Rd</div>
+</div>
+
+<!-- App logo -->
+<div id="app-logo">🚨 CriminalMaps</div>
+
+<!-- Top search bar -->
+<div id="topbar">
+  <div id="search-bar">
+    <span class="search-icon">🔍</span>
+    <input id="search-input" type="text" placeholder="Where to? (crime optional)">
+    <button id="go-btn">Go</button>
+  </div>
+</div>
+
+<!-- Navigation strip (while navigating) -->
+<div id="nav-strip">
+  <div id="nav-direction">
+    <span id="nav-arrow">↑</span>
+    <span id="nav-street-name">Proceed north</span>
+  </div>
+  <div id="nav-street" id="nav-street">on Main Street</div>
+  <div id="nav-meta">
+    <span id="nav-dist">0.3 mi</span>
+    <span>·</span>
+    <span id="nav-eta">4 min away</span>
+    <span>·</span>
+    <span class="criminal-badge">🚨 CHAOS MODE</span>
+  </div>
+</div>
+
+<!-- Side buttons -->
+<button class="map-btn" id="btn-layers">🗂️</button>
+<button class="map-btn" id="btn-locate">📍</button>
+
+<!-- Speed display -->
+<div id="speed-display">
+  <div class="speed-num" id="speed-num">0</div>
+  <div class="speed-unit">km/h</div>
+</div>
+
+<!-- Bottom sheet -->
+<div id="bottom-sheet">
+  <div class="sheet-handle"></div>
+
+  <div id="route-summary">
+    <div class="route-header">
+      <div>
+        <div class="route-time-legit" id="legit-time">32 min (law-abiding loser route)</div>
+        <div class="route-time-criminal" id="criminal-time">19 <span style="font-size:18px">min</span></div>
+        <div class="route-time-label">⚡ with criminal optimizations</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:13px;color:var(--subtext)" id="route-dist-display">4.2 mi</div>
+        <div style="font-size:11px;color:var(--subtext);margin-top:2px" id="route-traffic">Light traffic</div>
+      </div>
+    </div>
+    <div class="route-via">Via <b id="route-via-name">Commerce Blvd</b> · <span style="color:#ea4335">2 illegal shortcuts detected</span></div>
+  </div>
+
+  <div id="suggestion-card">
+    <div class="suggestion-header">
+      <span>🚨</span>
+      <span id="suggestion-label">ILLEGAL U-TURN OPPORTUNITY</span>
+    </div>
+    <div class="suggestion-body">
+      <div class="suggestion-text" id="suggestion-text">
+        Would you like to make an illegal U-turn here to save 9 minutes?
+      </div>
+      <div class="suggestion-saving" id="suggestion-saving">⚡ Saves 9 min · Risk level: Medium</div>
+      <div class="suggestion-buttons">
+        <button class="btn-yes" id="btn-yes">Hell yeah 🤙</button>
+        <button class="btn-no" id="btn-no">No thanks</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 12px 16px 0; display:flex; gap:8px;">
+    <button id="start-nav-btn" style="flex:1;background:var(--blue);color:white;border:none;border-radius:24px;padding:14px;font-family:'Google Sans',sans-serif;font-weight:700;font-size:16px;cursor:pointer;">
+      Start Navigation 🚗
+    </button>
+  </div>
+</div>
+
+<!-- ETA bar (while navigating) -->
+<div id="eta-bar">
+  <div>
+    <div class="eta-time" id="eta-time">19 min</div>
+    <div class="eta-detail" id="eta-detail">Arrive ~4:37 PM · 4.2 mi</div>
+  </div>
+  <button id="end-nav-btn">✕ End</button>
+</div>
+
+<!-- Reaction toast -->
+<div id="reaction-toast" id="reaction-toast"></div>
+
+<script>
+// ─── STATE ───
+const state = {
+  navigating: false,
+  userLat: null,
+  userLng: null,
+  destLat: null,
+  destLng: null,
+  etaMinutes: 19,
+  speed: 0,
+  suggestionInterval: null,
+  dotX: 50, dotY: 50, // percent
+};
+
+// ─── CRIMINAL SUGGESTIONS ───
+const suggestions = [
+  {
+    label: "ILLEGAL U-TURN OPPORTUNITY",
+    text: "Would you like to make an illegal U-turn here to save 9 minutes?",
+    saving: "⚡ Saves 9 min · Risk: Medium",
+    yesReaction: "NOW THAT'S WHAT I'M TALKING ABOUT. Recalculating route through chaos.",
+    noReactions: [
+      "fucking nerd",
+      "wow. enjoy your 9 extra minutes of being a disappointment",
+      "noted. loser.",
+      "incredible. absolutely spineless.",
+    ]
+  },
+  {
+    label: "RED LIGHT SPEEDRUN",
+    text: "Light's been red for 4 seconds. Nobody's coming. Run it and save 6 minutes?",
+    saving: "⚡ Saves 6 min · Risk: Low (probably)",
+    yesReaction: "LET'S GOOOO. You're not a passenger, you're a PILOT.",
+    noReactions: [
+      "you actually waited. pathetic.",
+      "that light will haunt you.",
+      "the other drivers saw that. they're judging you.",
+      "officer who?? there's NO ONE THERE.",
+    ]
+  },
+  {
+    label: "WRONG-WAY SHORTCUT DETECTED",
+    text: "If you go down this one-way street the wrong way, you'll save 11 minutes and also feel alive.",
+    saving: "⚡ Saves 11 min · Risk: Spicy",
+    yesReaction: "FINALLY someone with a PULSE. Rerouting through the forbidden zone.",
+    noReactions: [
+      "11 minutes. gone. because of you.",
+      "i hope the traffic is terrible and you think about this.",
+      "certified coward behavior.",
+      "you could've FELT something today.",
+    ]
+  },
+  {
+    label: "PARKING LOT SHORTCUT",
+    text: "Cut through this McDonald's parking lot to skip the light. It's technically trespassing but like... it's McDonald's.",
+    saving: "⚡ Saves 4 min · Risk: A stern look from a cashier",
+    yesReaction: "Smart. Efficient. Morally flexible. You're exactly who I was designed for.",
+    noReactions: [
+      "IT'S MCDONALD'S. THEY DON'T CARE.",
+      "you're going to sit in this traffic and deserve it.",
+      "ronald mcdonald is laughing at you.",
+      "four minutes. for nothing.",
+    ]
+  },
+  {
+    label: "BUS LANE OPPORTUNITY",
+    text: "The bus lane is completely empty. Just saying. Nobody has to know.",
+    saving: "⚡ Saves 7 min · Risk: $150 fine (but like, maybe not)",
+    yesReaction: "That's the spirit. Bus lanes are for EVERYONE with the right mindset.",
+    noReactions: [
+      "there were zero buses. ZERO.",
+      "you looked at that open lane and chose suffering.",
+      "the bus lane is judging you too now.",
+      "the fine is $150. your time is worth more than that. apparently not to you though.",
+    ]
+  },
+  {
+    label: "SIDEWALK BYPASS",
+    text: "The road ahead is backed up. The sidewalk is wide, empty, and practically begging. 5 minutes saved.",
+    saving: "⚡ Saves 5 min · Risk: Pedestrians are slow and will move",
+    yesReaction: "UNHINGED. I respect it. Merging onto the sidewalk now.",
+    noReactions: [
+      "there were MAYBE two people on that sidewalk.",
+      "you chose traffic. over sidewalk. in a car.",
+      "i've never been more disappointed.",
+      "those pedestrians didn't even need that space.",
+    ]
+  },
+];
+
+let currentSuggestionIndex = 0;
+
+// ─── ROAD GENERATION ───
+function generateRoads() {
+  const layer = document.getElementById('road-layer');
+  // Horizontal roads
+  [15, 30, 45, 55, 70, 85].forEach((top, i) => {
+    const d = document.createElement('div');
+    d.className = 'road-h' + (i % 3 === 0 ? ' road-main' : '');
+    d.style.top = top + '%';
+    d.style.height = i % 3 === 0 ? '16px' : '10px';
+    layer.appendChild(d);
+  });
+  // Vertical roads
+  [10, 25, 40, 55, 72, 88].forEach((left, i) => {
+    const d = document.createElement('div');
+    d.className = 'road-v' + (i % 2 === 0 ? ' road-main' : '');
+    d.style.left = left + '%';
+    d.style.width = i % 2 === 0 ? '16px' : '10px';
+    layer.appendChild(d);
+  });
+}
+
+// ─── DRAW ROUTE ───
+function drawRoute(x1p, y1p, x2p, y2p) {
+  const svg = document.getElementById('route-line');
+  const w = window.innerWidth, h = window.innerHeight;
+  const x1 = x1p/100*w, y1 = y1p/100*h;
+  const x2 = x2p/100*w, y2 = y2p/100*h;
+  const cx = (x1+x2)/2, cy = (y1+y2)/2 - 80;
+
+  svg.innerHTML = `
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+        <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <path d="M${x1},${y1} Q${cx},${cy} ${x2},${y2}"
+      stroke="#1a73e8" stroke-width="6" fill="none" stroke-linecap="round"
+      stroke-dasharray="12,6" opacity="0.9" filter="url(#glow)">
+      <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
+    </path>
+    <circle cx="${x2}" cy="${y2}" r="10" fill="#ea4335" stroke="white" stroke-width="3"/>
+    <circle cx="${x2}" cy="${y2}" r="5" fill="white"/>
+  `;
+}
+
+// ─── MOVE GPS DOT ───
+function moveDot() {
+  if (!state.navigating) return;
+  // Drift toward destination
+  const dx = state.destX - state.dotX;
+  const dy = state.destY - state.dotY;
+  const step = 2;
+  state.dotX += (dx / Math.max(Math.abs(dx)+Math.abs(dy), 1)) * step * (Math.random()*0.5+0.75);
+  state.dotY += (dy / Math.max(Math.abs(dx)+Math.abs(dy), 1)) * step * (Math.random()*0.5+0.75);
+
+  const dot = document.getElementById('gps-dot');
+  dot.style.left = state.dotX + '%';
+  dot.style.top = state.dotY + '%';
+
+  // Fake speed
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  state.speed = Math.round(30 + dist * 1.5 + Math.random() * 20);
+  document.getElementById('speed-num').textContent = state.speed;
+
+  // ETA countdown
+  state.etaMinutes = Math.max(0, state.etaMinutes - 0.05);
+  document.getElementById('eta-time').textContent = Math.ceil(state.etaMinutes) + ' min';
+
+  // Update turn instruction
+  updateNavStrip();
+}
+
+const turnInstructions = [
+  { arrow: '↑', street: 'Continue on Main Street', dist: '0.4 mi' },
+  { arrow: '↰', street: 'Turn left onto Commerce Blvd', dist: '0.2 mi' },
+  { arrow: '↑', street: 'Continue straight', dist: '0.6 mi' },
+  { arrow: '↱', street: 'Turn right onto Park Road', dist: '0.1 mi' },
+  { arrow: '↑', street: 'Head north on Industrial Ave', dist: '0.3 mi' },
+];
+let turnIdx = 0;
+
+function updateNavStrip() {
+  const t = turnInstructions[turnIdx % turnInstructions.length];
+  document.getElementById('nav-arrow').textContent = t.arrow;
+  document.getElementById('nav-street-name').textContent = t.street;
+  document.getElementById('nav-dist').textContent = t.dist;
+  const eta = Math.ceil(state.etaMinutes);
+  document.getElementById('nav-eta').textContent = eta + ' min away';
+}
+
+// ─── SHOW SUGGESTION ───
+function showNextSuggestion() {
+  const s = suggestions[currentSuggestionIndex % suggestions.length];
+  currentSuggestionIndex++;
+
+  document.getElementById('suggestion-label').textContent = s.label;
+  document.getElementById('suggestion-text').textContent = s.text;
+  document.getElementById('suggestion-saving').textContent = s.saving;
+
+  const card = document.getElementById('suggestion-card');
+  card.classList.add('visible');
+
+  // Store current suggestion for button handlers
+  window._currentSuggestion = s;
+}
+
+// ─── TOAST ───
+function showToast(msg, duration = 3200) {
+  const t = document.getElementById('reaction-toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ─── GPS LOCATION ───
+function getLocation() {
+  if (!navigator.geolocation) {
+    fakeLocation();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      state.userLat = pos.coords.latitude;
+      state.userLng = pos.coords.longitude;
+      hideLoading();
+    },
+    err => {
+      fakeLocation();
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+
+function fakeLocation() {
+  state.userLat = 10.6549;
+  state.userLng = -61.5019;
+  hideLoading();
+}
+
+function hideLoading() {
+  document.getElementById('gps-loading').classList.add('hidden');
+  document.getElementById('gps-dot').style.left = '50%';
+  document.getElementById('gps-dot').style.top = '60%';
+  state.dotX = 50; state.dotY = 60;
+}
+
+// ─── START NAV ───
+function startNavigation() {
+  const dest = document.getElementById('search-input').value.trim();
+  if (!dest) {
+    showToast('Enter a destination, genius 🙄');
+    return;
+  }
+
+  state.navigating = true;
+  state.destX = 25 + Math.random() * 50;
+  state.destY = 20 + Math.random() * 40;
+  state.etaMinutes = 12 + Math.random() * 15;
+
+  document.getElementById('bottom-sheet').classList.remove('visible');
+  document.getElementById('topbar').style.display = 'none';
+  document.getElementById('nav-strip').classList.add('active');
+  document.getElementById('eta-bar').classList.add('active');
+  document.getElementById('speed-display').classList.add('active');
+
+  drawRoute(state.dotX, state.dotY, state.destX, state.destY);
+
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + Math.ceil(state.etaMinutes));
+  const h = now.getHours() % 12 || 12;
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+  document.getElementById('eta-detail').textContent = `Arrive ~${h}:${m} ${ampm} · 4.2 mi`;
+
+  updateNavStrip();
+
+  // Move dot every 2s
+  setInterval(() => {
+    moveDot();
+    if (Math.random() < 0.07) { turnIdx++; updateNavStrip(); }
+  }, 2000);
+
+  // Show criminal suggestions every 25-40s
+  setTimeout(() => {
+    showNextSuggestion();
+    state.suggestionInterval = setInterval(() => {
+      if (state.navigating) showNextSuggestion();
+    }, 30000 + Math.random() * 15000);
+  }, 8000);
+
+  showToast('🚨 Route loaded. Criminal optimizations: ON.');
+}
+
+// ─── BUTTON HANDLERS ───
+document.getElementById('go-btn').addEventListener('click', () => {
+  // Show bottom sheet with route info
+  document.getElementById('bottom-sheet').classList.add('visible');
+  const dest = document.getElementById('search-input').value.trim() || 'your destination';
+
+  // Randomize route info
+  const legit = Math.round(20 + Math.random() * 20);
+  const criminal = Math.round(legit * 0.55);
+  const savings = legit - criminal;
+  document.getElementById('legit-time').textContent = legit + ' min (law-abiding loser route)';
+  document.getElementById('criminal-time').innerHTML = criminal + ' <span style="font-size:18px">min</span>';
+  document.getElementById('route-via-name').textContent = ['Commerce Blvd','Main Street','Industrial Ave'][Math.floor(Math.random()*3)];
+  document.getElementById('route-dist-display').textContent = (2 + Math.random()*5).toFixed(1) + ' mi';
+
+  const shortcuts = Math.floor(Math.random()*3)+1;
+  document.querySelector('#route-summary .route-via').innerHTML =
+    `Via <b id="route-via-name">Commerce Blvd</b> · <span style="color:#ea4335">${shortcuts} illegal shortcut${shortcuts>1?'s':''} detected</span>`;
+});
+
+document.getElementById('start-nav-btn').addEventListener('click', startNavigation);
+
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('go-btn').click();
+});
+
+document.getElementById('btn-yes').addEventListener('click', () => {
+  const s = window._currentSuggestion;
+  if (!s) return;
+  document.getElementById('suggestion-card').classList.remove('visible');
+  showToast('🔥 ' + s.yesReaction, 4000);
+  state.etaMinutes = Math.max(1, state.etaMinutes - (Math.random()*5+3));
+  document.getElementById('eta-time').textContent = Math.ceil(state.etaMinutes) + ' min';
+});
+
+document.getElementById('btn-no').addEventListener('click', () => {
+  const s = window._currentSuggestion;
+  if (!s) return;
+  document.getElementById('suggestion-card').classList.remove('visible');
+  const reaction = s.noReactions[Math.floor(Math.random() * s.noReactions.length)];
+  showToast('😒 ' + reaction, 4000);
+});
+
+document.getElementById('end-nav-btn').addEventListener('click', () => {
+  state.navigating = false;
+  clearInterval(state.suggestionInterval);
+  document.getElementById('nav-strip').classList.remove('active');
+  document.getElementById('eta-bar').classList.remove('active');
+  document.getElementById('speed-display').classList.remove('active');
+  document.getElementById('topbar').style.display = '';
+  document.getElementById('suggestion-card').classList.remove('visible');
+  document.getElementById('route-line').innerHTML = '';
+  showToast('Navigation ended. You somehow survived. 🙄');
+});
+
+document.getElementById('btn-locate').addEventListener('click', () => {
+  showToast('📍 Re-acquiring your cowardly location…');
+  getLocation();
+});
+
+// ─── SERVICE WORKER ───
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/CriminalMaps/sw.js', { scope: '/CriminalMaps/' }).catch(() => {});
+  });
+}
+
+// ─── INIT ───
+generateRoads();
+getLocation();
+
+// Show sheet if user types and blurs
+document.getElementById('search-input').addEventListener('focus', () => {
+  if (!state.navigating) {
+    document.getElementById('bottom-sheet').classList.remove('visible');
+  }
+});
+</script>
+</body>
+</html>
